@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -13,9 +14,11 @@ import (
 
 func main() {
 	var (
-		wgServer = sync.WaitGroup{}
-		signChan = make(chan os.Signal, 1)
+		ctxServer, ctxServerCancel = context.WithCancel(context.Background())
+		wgServer                   = sync.WaitGroup{}
+		signChan                   = make(chan os.Signal, 1)
 	)
+	defer ctxServerCancel()
 
 	signal.Notify(signChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 
@@ -47,12 +50,21 @@ func main() {
 				defer wgServer.Done()
 				defer conn.Close()
 
-				pr, pw := io.Pipe()
+				var (
+					pr, pw      = io.Pipe()
+					ctx, cancel = context.WithCancel(ctxServer)
+				)
+				defer cancel()
+
+				go func() {
+					<-ctx.Done()
+					_ = conn.Close()
+				}()
+
 				go func() {
 					defer pw.Close()
 					_, err := io.Copy(pw, conn)
 					if err != nil {
-						log.Println(err)
 						return
 					}
 				}()
@@ -66,6 +78,7 @@ func main() {
 	}()
 
 	<-signChan
+	ctxServerCancel()
 	_ = listener.Close()
 	wgServer.Wait()
 }
