@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/anantadwi13/protohackers/7-line-reversal/app"
+	"github.com/anantadwi13/protohackers/7-line-reversal/lrcp"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +18,10 @@ func main() {
 	catchSignal(func() {
 		cancel()
 	})
+
+	appHandler := &app.App{}
+	l := lrcp.NewLRCP(ctx, nil, appHandler)
+	_ = l
 
 	<-ctx.Done()
 }
