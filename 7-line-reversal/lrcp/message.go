@@ -3,9 +3,10 @@ package lrcp
 import (
 	"errors"
 	"fmt"
-	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 	"io"
 	"strconv"
+
+	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 )
 
 const (
@@ -27,10 +28,11 @@ type Message interface {
 
 func UnmarshalMessage(reader io.Reader) (msg Message, err error) {
 	var (
-		action = make([]byte, 0, actionMaxLength) // todo: use pool
+		action = util.PoolGet(actionMaxLength)[:0]
 		buf    = make([]byte, 1)
 		n      int
 	)
+	defer util.PoolPut(action)
 
 	msg = &MessageUnknown{}
 	defer func() {
@@ -233,16 +235,12 @@ func packToWriter(w io.Writer, data ...any) error {
 		case []byte:
 			buf := make([]byte, 1)
 			for _, c := range e {
-				//if c == '\\' || c == '/' || c == '\n' {
 				if c == '\\' || c == '/' {
 					buf[0] = '\\'
 					_, err := w.Write(buf)
 					if err != nil {
 						return err
 					}
-					//if c == '\n' {
-					//	c = 'n'
-					//}
 				}
 				buf[0] = c
 				_, err := w.Write(buf)
@@ -268,7 +266,9 @@ func unpackFromReader(r io.Reader, data ...any) error {
 		return errors.New("nil reader")
 	}
 
-	buf := make([]byte, MTU) // todo: pool
+	buf := util.PoolGet(MTU)[:MTU]
+	defer util.PoolPut(buf)
+
 	n, err := r.Read(buf)
 	if err != nil {
 		return err
@@ -296,12 +296,6 @@ func unpackFromReader(r io.Reader, data ...any) error {
 				if val == '\\' && (idx > 0 && curBuf[idx-1] != '\\') {
 					continue
 				}
-				//if idx > 0 && curBuf[idx-1] == '\\' {
-				//	switch val {
-				//	case 'n':
-				//		val = '\n'
-				//	}
-				//}
 				bytesVal = append(bytesVal, val)
 			}
 			*e = bytesVal

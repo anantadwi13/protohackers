@@ -2,19 +2,20 @@ package main
 
 import (
 	"context"
-	"github.com/anantadwi13/protohackers/7-line-reversal/lrcp"
-	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 	"io"
 	"log"
 	"os"
 	"os/signal"
+
+	"github.com/anantadwi13/protohackers/7-line-reversal/lrcp"
+	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	server, err := lrcp.NewServer(":19090", func(w io.Writer, r io.Reader) {
+	server, err := lrcp.NewServer(":19090", func(ctx context.Context, w io.Writer, r io.Reader) {
 		buf := util.PoolGet(lrcp.MaxLineLength)
 		defer util.PoolPut(buf)
 

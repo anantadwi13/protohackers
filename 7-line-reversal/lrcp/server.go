@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 	"io"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/anantadwi13/protohackers/7-line-reversal/util"
 )
 
 const (
 	MaxLineLength = 10_000 // 10k with 1 char as newline
 )
 
-type Handler func(w io.Writer, r io.Reader)
+type Handler func(ctx context.Context, w io.Writer, r io.Reader)
 
 type Server interface {
 	Listen() error
@@ -125,7 +127,6 @@ func (s *serverUDP) Listen() error {
 				defer util.PoolPut(buf)
 
 				buf = buf[:n]
-				log.Printf("incoming raw %s %v %d", string(buf), buf, len(buf))
 				message, err := UnmarshalMessage(bytes.NewReader(buf))
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
@@ -133,6 +134,7 @@ func (s *serverUDP) Listen() error {
 					}
 					return
 				}
+				log.Printf("incoming %d %d %s", message.SessionNumber(), len(buf), string(buf))
 				s.handleIncomingMessage(serverCtx, conn, message, addr)
 			}()
 		}
@@ -159,7 +161,7 @@ func (s *serverUDP) handleIncomingMessage(ctx context.Context, conn *net.UDPConn
 	switch m := msg.(type) {
 	case *MessageConnect:
 		sess := s.sessionManager.GetOrCreate(ctx, conn, addr, m.sessionNumber)
-		sess.HandleIncoming(ctx, conn, msg)
+		sess.HandleIncoming(conn, msg)
 	default:
 		// if no session, close conn
 		sess := s.sessionManager.Get(ctx, m.SessionNumber())
@@ -168,26 +170,10 @@ func (s *serverUDP) handleIncomingMessage(ctx context.Context, conn *net.UDPConn
 				sessionNumber: m.SessionNumber(),
 			}
 
-			buf := util.PoolGet(MTU)
-			defer util.PoolPut(buf)
-
-			bufWriter := bytes.NewBuffer(buf) // todo put bytes.Buffer to pool?
-			bufWriter.Reset()
-
-			err := res.Marshal(bufWriter)
-			if err != nil {
-				log.Printf("dispatcher Marshal. err: %s", err)
-				return
-			}
-
-			_, err = conn.WriteToUDP(bufWriter.Bytes(), addr)
-			if err != nil {
-				log.Printf("dispatcher WriteToUDP. err: %s", err)
-				return
-			}
+			dispatcher(ctx, conn, res, addr)
 			return
 		}
-		sess.HandleIncoming(ctx, conn, msg)
+		sess.HandleIncoming(conn, msg)
 	}
 }
 
@@ -211,4 +197,31 @@ func (s *serverUDP) Shutdown(ctx context.Context) error {
 	case <-s.stopped:
 	}
 	return nil
+}
+
+func dispatcher(ctx context.Context, conn *net.UDPConn, msg Message, clientAddr *net.UDPAddr) {
+	buf := util.PoolGet(MTU)
+	defer util.PoolPut(buf)
+
+	bufWriter := bytes.NewBuffer(buf) // todo put bytes.Buffer to pool?
+	bufWriter.Reset()
+
+	err := msg.Marshal(bufWriter)
+	if err != nil {
+		log.Printf("dispatcher Marshal. err: %s", err)
+		return
+	}
+
+	log.Printf("outgoing %d %d %s", msg.SessionNumber(), bufWriter.Len(), string(bufWriter.Bytes()))
+
+	err = conn.SetWriteDeadline(time.Now().Add(TimeoutRetransmission))
+	if err != nil {
+		log.Printf("dispatcher SetWriteDeadline. err: %s", err)
+		return
+	}
+	_, err = conn.WriteToUDP(bufWriter.Bytes(), clientAddr)
+	if err != nil {
+		log.Printf("dispatcher WriteToUDP. err: %s", err)
+		return
+	}
 }
