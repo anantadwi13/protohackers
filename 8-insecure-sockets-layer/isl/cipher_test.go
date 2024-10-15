@@ -2,6 +2,7 @@ package isl
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,7 +97,9 @@ func TestCipherSpec(t *testing.T) {
 			assert.NotNil(t, reader)
 			assert.NotNil(t, writer)
 
-			n, err := writer.Write(tt.args.plainText)
+			bufWriter := make([]byte, len(tt.args.plainText))
+			copy(bufWriter, tt.args.plainText)
+			n, err := writer.Write(bufWriter)
 			assert.NoError(t, err)
 			assert.EqualValues(t, len(tt.args.plainText), n)
 
@@ -106,6 +109,52 @@ func TestCipherSpec(t *testing.T) {
 			n, err = reader.Read(gotPlainText)
 			assert.NoError(t, err)
 			assert.EqualValues(t, len(gotPlainText), n)
+
+			assert.EqualValues(t, tt.args.plainText, gotPlainText[:n])
+		})
+	}
+}
+
+func TestReadCipherSpec(t *testing.T) {
+	type args struct {
+		r io.Reader
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []byte
+		wantErr bool
+	}{
+		{
+			name: "success",
+			args: args{
+				r: bytes.NewReader([]byte(
+					"\x02\x7b\x05\x01\x00" +
+						"\xf2\x20\xba\x44\x18\x84\xba\xaa\xd0\x26\x44\xa4\xa8\x7e" +
+						"\x6a\x48\xd6\x58\x34\x44\xd6\x7a\x98\x4e\x0c\xcc\x94\x31",
+				)),
+			},
+			want: []byte(
+				"4x dog,5x car\n" +
+					"3x rat,2x cat\n",
+			),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cs, err := ReadCipherSpec(tt.args.r)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			reader := cs.NewReader(tt.args.r)
+			got, err := io.ReadAll(reader)
+			assert.NoError(t, err)
+
+			assert.EqualValues(t, tt.want, got)
 		})
 	}
 }
