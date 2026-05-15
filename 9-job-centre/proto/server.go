@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/anantadwi13/protohackers/9-job-centre/util"
+	"github.com/rs/xid"
 )
 
 var (
@@ -19,10 +20,13 @@ var (
 )
 
 type Handler interface {
-	PutJob(ctx context.Context, queue string, job any, priority int) (jobID int, err error)
-	GetJob(ctx context.Context, queues []string, wait bool) (jobID int, job any, priority int, queue string, err error)
-	DeleteJob(ctx context.Context, id int) (err error)
-	AbortJob(ctx context.Context, id int) (err error)
+	PutJob(ctx context.Context, queue string, job any, priority uint32) (jobID uint32, err error)
+	GetJob(ctx context.Context, queues []string, wait bool) (jobID uint32, job any, priority uint32, queue string, err error)
+	DeleteJob(ctx context.Context, jobID uint32) (err error)
+	AbortJob(ctx context.Context, jobID uint32) (err error)
+
+	OnClientConnected(ctx context.Context, clientID string)
+	OnClientDisconnected(ctx context.Context, clientID string)
 }
 
 type Server interface {
@@ -100,8 +104,11 @@ func (s *server) Listen() error {
 		go func() {
 			defer wg.Done()
 
-			ch := &connHandler{conn: conn, handler: s.handler}
-			ch.looper(s.baseCtx)
+			clientID := xid.New().String()
+			ctx := context.WithValue(s.baseCtx, clientIDContextKey, clientID)
+
+			ch := &connHandler{conn: conn, handler: s.handler, clientID: clientID}
+			ch.looper(ctx)
 		}()
 	}
 }
@@ -122,14 +129,30 @@ func (s *server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+type contextKey string
+
+var clientIDContextKey = contextKey("clientID")
+
+func GetClientID(ctx context.Context) (string, error) {
+	clientID, ok := ctx.Value(clientIDContextKey).(string)
+	if !ok || clientID == "" {
+		return "", errors.New("client ID not found in context")
+	}
+	return clientID, nil
+}
+
 type connHandler struct {
-	conn    *net.TCPConn
-	handler Handler
+	clientID string
+	conn     *net.TCPConn
+	handler  Handler
 }
 
 func (c *connHandler) looper(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	c.handler.OnClientConnected(ctx, c.clientID)
+	defer c.handler.OnClientDisconnected(ctx, c.clientID)
 
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
@@ -248,7 +271,7 @@ func (c *connHandler) looper(ctx context.Context) {
 					var (
 						putReq = &putRequest{}
 						putRes = &putResponse{}
-						jobID  int
+						jobID  uint32
 					)
 					err = json.NewDecoder(rb).Decode(putReq)
 					if err != nil {
@@ -269,9 +292,9 @@ func (c *connHandler) looper(ctx context.Context) {
 					var (
 						getReq   = &getRequest{}
 						getRes   = &getResponse{}
-						jobID    int
+						jobID    uint32
 						job      any
-						priority int
+						priority uint32
 						queue    string
 					)
 					err = json.NewDecoder(rb).Decode(getReq)
@@ -312,7 +335,7 @@ func (c *connHandler) looper(ctx context.Context) {
 					if err != nil {
 						return err
 					}
-					err = c.handler.DeleteJob(ctx, abortReq.ID)
+					err = c.handler.AbortJob(ctx, abortReq.ID)
 					if err != nil {
 						return err
 					}
@@ -341,11 +364,11 @@ type (
 		request
 		Queue string `json:"queue"`
 		Job   any    `json:"job"`
-		Pri   int    `json:"pri"`
+		Pri   uint32 `json:"pri"`
 	}
 	putResponse struct {
 		response
-		ID int `json:"id"`
+		ID uint32 `json:"id"`
 	}
 	getRequest struct {
 		request
@@ -354,18 +377,18 @@ type (
 	}
 	getResponse struct {
 		response
-		ID    int    `json:"id,omitempty"`
+		ID    uint32 `json:"id,omitempty"`
 		Job   any    `json:"job,omitempty"`
-		Pri   int    `json:"pri,omitempty"`
+		Pri   uint32 `json:"pri,omitempty"`
 		Queue string `json:"queue,omitempty"`
 	}
 	deleteRequest struct {
 		request
-		ID int `json:"id"`
+		ID uint32 `json:"id"`
 	}
 	abortRequest struct {
 		request
-		ID int `json:"id"`
+		ID uint32 `json:"id"`
 	}
 )
 
