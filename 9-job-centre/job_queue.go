@@ -10,7 +10,6 @@ import (
 var (
 	ErrJobQueueEmpty    = errors.New("job queue is empty")
 	ErrJobQueueNotFound = errors.New("job is not found")
-	ErrJobQueueInvalid  = errors.New("invalid job queue name")
 )
 
 /*
@@ -98,7 +97,7 @@ func (jq *JobQueues) Pop(ctx context.Context, queues []string, wait bool) (Job, 
 
 	for _, queueName := range queues {
 		if _, ok := jq.jobQueues[queueName]; !ok {
-			return Job{}, ErrJobQueueInvalid
+			continue
 		}
 		validQueues[queueName] = jq.jobQueues[queueName]
 	}
@@ -108,11 +107,22 @@ func (jq *JobQueues) Pop(ctx context.Context, queues []string, wait bool) (Job, 
 			return Job{}, ctx.Err()
 		}
 
+		var (
+			highestQueue    *jobQueue
+			highestPriority uint32
+		)
 		for _, queue := range validQueues {
 			if queue.Len() == 0 {
 				continue
 			}
-			jj := heap.Pop(queue).(*job)
+			priority := (*queue)[0].Priority
+			if priority > highestPriority {
+				highestQueue = queue
+				highestPriority = priority
+			}
+		}
+		if highestQueue != nil {
+			jj := heap.Pop(highestQueue).(*job)
 			delete(jq.jobLocators, jj.JobID)
 			return jj.Job, nil
 		}

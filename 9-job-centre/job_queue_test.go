@@ -15,7 +15,7 @@ func TestJobQueues(t *testing.T) {
 
 	j, err := jq.Pop(ctx, []string{"q1"}, false)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrJobQueueInvalid)
+	assert.ErrorIs(t, err, ErrJobQueueEmpty)
 	assert.Equal(t, Job{}, j)
 
 	jq.Push(Job{Queue: "q1", JobID: 2, Job: "job2", Priority: 2})
@@ -46,7 +46,7 @@ func jobQueues_concurrent(tb testing.TB) {
 
 	j, err := jq.Pop(ctx, []string{"q1"}, false)
 	assert.Error(tb, err)
-	assert.ErrorIs(tb, err, ErrJobQueueInvalid)
+	assert.ErrorIs(tb, err, ErrJobQueueEmpty)
 	assert.Equal(tb, Job{}, j)
 
 	start := time.Now()

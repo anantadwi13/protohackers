@@ -173,13 +173,15 @@ func (c *connHandler) looper(ctx context.Context) {
 		defer cancel()
 
 		rb := new(requestBuffer)
+		var prevBuf []byte
 		for {
-			nextRb, err := nextRequestBuffer(ctx, bufSize, c.conn, rb)
+			nextRb, restBuf, err := nextRequestBuffer(ctx, bufSize, c.conn, rb, prevBuf)
 			if err != nil {
 				return
 			}
 			reqChan <- rb
 			rb = nextRb
+			prevBuf = restBuf
 		}
 
 	}()
@@ -251,6 +253,12 @@ func (c *connHandler) looper(ctx context.Context) {
 						}
 					}
 				}()
+
+				if rb.Len() == 0 {
+					// if the request contains only newline, do not return any response.
+					isResponseWritten = true
+					return nil
+				}
 
 				req := &request{}
 				err = json.NewDecoder(rb).Decode(req)
@@ -392,7 +400,7 @@ type (
 	}
 )
 
-func nextRequestBuffer(ctx context.Context, bufSize int, reader io.Reader, curReqBuffer *requestBuffer) (nextReqBuffer *requestBuffer, err error) {
+func nextRequestBuffer(ctx context.Context, bufSize int, reader io.Reader, curReqBuffer *requestBuffer, prevBuf []byte) (nextReqBuffer *requestBuffer, restBuf []byte, err error) {
 	var (
 		buf = util.GetBytes(bufSize)
 		n   int
@@ -401,17 +409,26 @@ func nextRequestBuffer(ctx context.Context, bufSize int, reader io.Reader, curRe
 
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 
-		n, err = reader.Read(buf)
-		if err != nil {
-			return
-		}
-		buf = buf[:n]
+		buf = buf[:cap(buf)]
 
-		if len(buf) == 0 {
-			continue
+		if prevBuf != nil && len(prevBuf) > 0 {
+			buf = buf[:copy(buf, prevBuf)]
+
+			util.PutBytes(prevBuf)
+			prevBuf = nil
+		} else {
+			n, err = reader.Read(buf)
+			if err != nil {
+				return
+			}
+			buf = buf[:n]
+
+			if len(buf) == 0 {
+				continue
+			}
 		}
 
 		newlineIdx := -1
@@ -450,9 +467,8 @@ func nextRequestBuffer(ctx context.Context, bufSize int, reader io.Reader, curRe
 		}
 
 		if len(dataAfterNewLine) > 0 {
-			nextReqBuffer = new(requestBuffer)
 			bufData := util.GetBytes(bufSize)
-			nextReqBuffer.data = append(nextReqBuffer.data, bufData[:copy(bufData, dataAfterNewLine)])
+			restBuf = bufData[:copy(bufData, dataAfterNewLine)]
 			break
 		}
 
@@ -460,9 +476,7 @@ func nextRequestBuffer(ctx context.Context, bufSize int, reader io.Reader, curRe
 			break
 		}
 	}
-	if nextReqBuffer == nil {
-		nextReqBuffer = new(requestBuffer)
-	}
+	nextReqBuffer = new(requestBuffer)
 	return
 }
 
@@ -470,6 +484,14 @@ type requestBuffer struct {
 	closed bool
 	data   [][]byte // must have same capacity
 	pos    int
+}
+
+func (r *requestBuffer) Len() int64 {
+	if len(r.data) == 0 {
+		return 0
+	}
+
+	return (int64(len(r.data))-1)*int64(cap(r.data[0])) + int64(len(r.data[len(r.data)-1]))
 }
 
 func (r *requestBuffer) Seek(offset int64, whence int) (n int64, err error) {

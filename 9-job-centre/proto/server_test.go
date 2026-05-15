@@ -18,7 +18,7 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 		name         string
 		args         args
 		wantCurData  [][]byte
-		wantNextData [][]byte
+		wantNextData []byte
 		wantRestData []byte
 		wantErr      bool
 	}{
@@ -33,9 +33,7 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 				[]byte("67890"),
 				[]byte("abcde"),
 			},
-			wantNextData: [][]byte{
-				[]byte("fghi"),
-			},
+			wantNextData: []byte("fghi"),
 			wantRestData: []byte("jklmno"),
 			wantErr:      false,
 		},
@@ -51,9 +49,7 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 				[]byte("abcde"),
 				[]byte("f"),
 			},
-			wantNextData: [][]byte{
-				[]byte("ghi"),
-			},
+			wantNextData: []byte("ghi"),
 			wantRestData: []byte("jklmno"),
 			wantErr:      false,
 		},
@@ -68,9 +64,7 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 				[]byte("67890"),
 				[]byte("abc"),
 			},
-			wantNextData: [][]byte{
-				[]byte("d"),
-			},
+			wantNextData: []byte("d"),
 			wantRestData: []byte("efghijklmno"),
 			wantErr:      false,
 		},
@@ -93,7 +87,7 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			curReqBuf := &requestBuffer{}
-			got, err := nextRequestBuffer(context.Background(), tt.args.bufSize, tt.args.reader, curReqBuf)
+			got, gotRestBuf, err := nextRequestBuffer(context.Background(), tt.args.bufSize, tt.args.reader, curReqBuf, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -103,8 +97,9 @@ func Test_connHandler_nextRequestBuffer(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.EqualValues(t, tt.wantCurData, curReqBuf.data)
-			assert.EqualValues(t, tt.wantNextData, got.data)
 			assert.EqualValues(t, tt.wantRestData, restData)
+			assert.EqualValues(t, tt.wantNextData, gotRestBuf)
+			assert.Nil(t, got.data)
 		})
 	}
 }

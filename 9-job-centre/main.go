@@ -24,7 +24,7 @@ func main() {
 	}
 	go func() {
 		log.Println("listening")
-		err = srv.Listen()
+		err := srv.Listen()
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -58,11 +58,13 @@ func initQueueHandler(ctx context.Context) *queueHandler {
 }
 
 func (h *queueHandler) PutJob(ctx context.Context, queue string, job any, priority uint32) (jobID uint32, err error) {
-	log.Println("put job")
+	jobID = h.jobID.Add(1)
+
+	log.Println("put job", queue, jobID, priority)
 
 	j := Job{
 		Queue:    queue,
-		JobID:    h.jobID.Add(1),
+		JobID:    jobID,
 		Job:      job,
 		Priority: priority,
 	}
@@ -72,7 +74,7 @@ func (h *queueHandler) PutJob(ctx context.Context, queue string, job any, priori
 }
 
 func (h *queueHandler) GetJob(ctx context.Context, queues []string, wait bool) (jobID uint32, job any, priority uint32, queue string, err error) {
-	log.Println("get job")
+	log.Println("get job", queues, wait)
 
 	clientID, err := proto.GetClientID(ctx)
 	if err != nil {
@@ -100,7 +102,7 @@ func (h *queueHandler) GetJob(ctx context.Context, queues []string, wait bool) (
 }
 
 func (h *queueHandler) DeleteJob(ctx context.Context, jobID uint32) (err error) {
-	log.Println("delete job")
+	log.Println("delete job", jobID)
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -131,7 +133,7 @@ func (h *queueHandler) DeleteJob(ctx context.Context, jobID uint32) (err error) 
 }
 
 func (h *queueHandler) AbortJob(ctx context.Context, jobID uint32) (err error) {
-	log.Println("abort job")
+	log.Println("abort job", jobID)
 
 	clientID, err := proto.GetClientID(ctx)
 	if err != nil {
