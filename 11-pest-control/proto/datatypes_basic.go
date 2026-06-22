@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"reflect"
+
+	"github.com/anantadwi13/protohackers/11-pest-control/util"
 )
 
 var (
@@ -47,10 +49,12 @@ func (b *Byte) Marshal(w io.Writer) (byte, error) {
 
 func (b *Byte) Unmarshal(r io.Reader) (int, byte, error) {
 	var (
-		buf = make([]byte, 1) // todo use pool
+		buf = util.GetBytes(4)[:1] // resize to 1
 		val byte
 		n   int
 	)
+	defer util.PutBytes(buf)
+
 	n, err := io.ReadFull(r, buf)
 	if err != nil {
 		return n, 0, err
@@ -80,7 +84,9 @@ func (u *U32) Value() uint32 {
 }
 
 func (u *U32) Marshal(w io.Writer) (byte, error) {
-	buf := make([]byte, 4) // todo use pool
+	buf := util.GetBytes(4)
+	defer util.PutBytes(buf)
+
 	binary.BigEndian.PutUint32(buf, uint32(*u))
 	preChecksum := preChecksumBytes(buf)
 
@@ -93,11 +99,13 @@ func (u *U32) Marshal(w io.Writer) (byte, error) {
 
 func (u *U32) Unmarshal(r io.Reader) (int, byte, error) {
 	var (
-		buf         = make([]byte, 4) // todo use pool
+		buf         = util.GetBytes(4)
 		val         uint32
 		n           int
 		preChecksum byte
 	)
+	defer util.PutBytes(buf)
+
 	newN, err := io.ReadFull(r, buf)
 	n += newN
 	preChecksum = preChecksumBytes(buf)
@@ -129,7 +137,9 @@ func (s *String) BytesLength() uint32 {
 }
 
 func (s *String) Marshal(w io.Writer) (byte, error) {
-	buf := make([]byte, 4) // todo use pool
+	buf := util.GetBytes(4)
+	defer util.PutBytes(buf)
+
 	binary.BigEndian.PutUint32(buf, uint32(len(*s)))
 	preChecksum := preChecksumBytes(buf)
 	_, err := w.Write(buf)
@@ -147,11 +157,12 @@ func (s *String) Marshal(w io.Writer) (byte, error) {
 
 func (s *String) Unmarshal(r io.Reader) (int, byte, error) {
 	var (
-		buf         = make([]byte, 4) // todo use pool
+		buf         = util.GetBytes(4)
 		length      = uint32(0)
 		n           int
 		preChecksum byte
 	)
+	defer util.PutBytes(buf)
 
 	newN, err := io.ReadFull(r, buf)
 	n += newN
@@ -161,14 +172,16 @@ func (s *String) Unmarshal(r io.Reader) (int, byte, error) {
 	}
 	length = binary.BigEndian.Uint32(buf)
 
-	buf = make([]byte, length)      // todo use pool
-	newN, err = io.ReadFull(r, buf) // todo check
+	strBuf := util.GetBytes(int(length))
+	defer util.PutBytes(strBuf)
+
+	newN, err = io.ReadFull(r, strBuf) // todo check
 	n += newN
-	preChecksum += preChecksumBytes(buf)
+	preChecksum += preChecksumBytes(strBuf)
 	if err != nil {
 		return n, preChecksum, err
 	}
-	*s = String(buf)
+	*s = String(strBuf)
 	return n, preChecksum, nil
 }
 
@@ -210,10 +223,11 @@ func (a *Array[T]) Elements() []T {
 
 func (a *Array[T]) Marshal(w io.Writer) (byte, error) {
 	var (
-		buf         = make([]byte, 4) // todo use pool
+		buf         = util.GetBytes(4)
 		length      = len(*a)
 		preChecksum byte
 	)
+	defer util.PutBytes(buf)
 
 	binary.BigEndian.PutUint32(buf, uint32(length))
 	preChecksum += preChecksumBytes(buf)
@@ -235,11 +249,13 @@ func (a *Array[T]) Marshal(w io.Writer) (byte, error) {
 
 func (a *Array[T]) Unmarshal(r io.Reader) (int, byte, error) {
 	var (
-		buf         = make([]byte, 4) // todo use pool
+		buf         = util.GetBytes(4)
 		length      = uint32(0)
 		n           int
 		preChecksum byte
 	)
+	defer util.PutBytes(buf)
+
 	newN, err := io.ReadFull(r, buf)
 	n += newN
 	preChecksum += preChecksumBytes(buf)

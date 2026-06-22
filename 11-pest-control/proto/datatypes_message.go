@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+
+	"github.com/anantadwi13/protohackers/11-pest-control/util"
 )
 
 var (
@@ -423,8 +425,9 @@ func messageBytesLength(fields ...DataType) uint32 {
 
 func messageMarshal(m Message, w io.Writer, fields ...DataType) (preChecksum byte, err error) {
 	var (
-		buf = make([]byte, 4) // todo use pool
+		buf = util.GetBytes(4)
 	)
+	defer util.PutBytes(buf)
 
 	_, err = w.Write([]byte{byte(m.Id())})
 	preChecksum += byte(m.Id())
@@ -461,10 +464,12 @@ func messageMarshal(m Message, w io.Writer, fields ...DataType) (preChecksum byt
 
 func messageUnmarshal(m Message, r io.Reader, fields ...DataType) (n int, preChecksum byte, err error) {
 	var (
-		buf       = make([]byte, 1) // todo use pool
+		buf       = util.GetBytes(4)
 		msgLength uint32
 	)
+	defer util.PutBytes(buf)
 
+	buf = buf[:1]
 	newN, err := io.ReadFull(r, buf)
 	n += newN
 	preChecksum += preChecksumBytes(buf)
@@ -476,7 +481,7 @@ func messageUnmarshal(m Message, r io.Reader, fields ...DataType) (n int, preChe
 		return
 	}
 
-	buf = make([]byte, 4) // todo use pool
+	buf = buf[:4]
 	newN, err = io.ReadFull(r, buf)
 	n += newN
 	preChecksum += preChecksumBytes(buf)
@@ -495,7 +500,7 @@ func messageUnmarshal(m Message, r io.Reader, fields ...DataType) (n int, preChe
 		}
 	}
 
-	buf = make([]byte, 1) // todo use pool
+	buf = buf[:1]
 	newN, err = io.ReadFull(r, buf)
 	n += newN
 	preChecksum += preChecksumBytes(buf)

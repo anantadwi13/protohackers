@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/anantadwi13/protohackers/11-pest-control/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -283,4 +284,28 @@ func TestDataType(t *testing.T) {
 			assert.Equal(t, tt.expectedVal, b)
 		})
 	}
+}
+
+func TestBuffer(t *testing.T) {
+	buf := util.GetBytes(10)
+	buf[0] = 'A'
+	buf[1] = 'B'
+	buf[2] = 'C'
+	buf = buf[:3]
+
+	assert.Equal(t, 10, cap(buf))
+	assert.Equal(t, 3, len(buf))
+
+	str := string(buf)
+	str2 := String(buf)
+	assert.Equal(t, "ABC", str)
+	assert.Equal(t, "ABC", str2.Value())
+	assert.Equal(t, []byte("ABC"), buf)
+
+	buf[0] = 'a'
+	buf[1] = 'b'
+	buf[2] = 'c'
+	assert.Equal(t, "ABC", str)
+	assert.Equal(t, "ABC", str2.Value())
+	assert.Equal(t, []byte("abc"), buf)
 }
