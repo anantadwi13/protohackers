@@ -28,6 +28,14 @@ type DataType interface {
 
 type Byte byte
 
+func NewByte(val byte) *Byte {
+	return new(Byte(val))
+}
+
+func (b *Byte) Value() byte {
+	return byte(*b)
+}
+
 func (b *Byte) BytesLength() uint32 {
 	return 1
 }
@@ -67,6 +75,10 @@ func NewU32(val uint32) *U32 {
 	return new(U32(val))
 }
 
+func (u *U32) Value() uint32 {
+	return uint32(*u)
+}
+
 func (u *U32) Marshal(w io.Writer) (byte, error) {
 	buf := make([]byte, 4) // todo use pool
 	binary.BigEndian.PutUint32(buf, uint32(*u))
@@ -104,12 +116,16 @@ func (u *U32) Reset() {
 
 type String string
 
-func (s *String) BytesLength() uint32 {
-	return uint32(len(*s)) + 4
-}
-
 func NewString(val string) *String {
 	return new(String(val))
+}
+
+func (s *String) Value() string {
+	return string(*s)
+}
+
+func (s *String) BytesLength() uint32 {
+	return uint32(len(*s)) + 4
 }
 
 func (s *String) Marshal(w io.Writer) (byte, error) {
@@ -163,6 +179,14 @@ func (s *String) Reset() {
 
 type Array[T DataType] []T
 
+func NewArray[T DataType](data ...T) *Array[T] {
+	return new(Array[T](data))
+}
+
+func (a *Array[T]) Value() []T {
+	return *a
+}
+
 func (a *Array[T]) BytesLength() uint32 {
 	length := uint32(4)
 	for _, v := range *a {
@@ -178,10 +202,6 @@ func newDataTypeValue[T DataType]() T {
 		return reflect.New(typ.Elem()).Interface().(T)
 	}
 	return zero
-}
-
-func NewArrayWithData[T DataType](data ...T) *Array[T] {
-	return new(Array[T](data))
 }
 
 func (a *Array[T]) Elements() []T {
