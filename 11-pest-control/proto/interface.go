@@ -12,7 +12,7 @@ type Server interface {
 }
 
 type ServerHandler interface {
-	HandleSiteVisit(ctx context.Context, msg MessageSiteVisit)
+	HandleSiteVisit(ctx context.Context, msg MessageSiteVisit) error
 }
 
 type AuthorityServerClientManager interface {
